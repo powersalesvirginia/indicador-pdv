@@ -1,0 +1,1039 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Indicador de PDV — Virginia</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root{
+    --ink:#0B1F33; --ink2:#40566E; --line:#DCE3EC; --bg:#F4F6F9; --surface:#FFFFFF;
+    --primary:#0057D9; --conc:#E23B3B; --ader:#12A150; --neutro:#F5A524;
+    --shadow:0 2px 8px rgba(11,31,51,.10); --shadow-lg:0 8px 28px rgba(11,31,51,.22);
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--ink);overflow:hidden;display:flex;flex-direction:column;height:100dvh}
+  button{font-family:inherit;cursor:pointer;border:none}
+  input,select,textarea{font-family:inherit;font-size:16px}
+
+  header{background:var(--ink);color:#fff;padding:9px 14px;display:flex;align-items:center;gap:9px;flex-shrink:0}
+  header h1{font-size:14px;font-weight:800;letter-spacing:.3px;margin:0;flex:1;text-transform:uppercase}
+  .gps-pill{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:700;background:#16324e;
+    padding:5px 9px;border-radius:20px;white-space:nowrap}
+  .gps-dot{width:8px;height:8px;border-radius:50%;background:#7c8ea3}
+  .gps-dot.on{background:#3ce07a;animation:pulse 2s infinite}
+  .gps-dot.err{background:#ff5a5a}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(60,224,122,.6)}70%{box-shadow:0 0 0 7px rgba(60,224,122,0)}100%{box-shadow:0 0 0 0 rgba(60,224,122,0)}}
+  .avatar{width:30px;height:30px;border-radius:50%;background:var(--primary);color:#fff;font-size:12px;
+    font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+
+  .syncbar{background:#FFF3C4;color:#7a5a00;font-size:11.5px;font-weight:700;padding:5px 14px;
+    text-align:center;flex-shrink:0;display:none}
+  .syncbar.show{display:block}
+  .syncbar.off{background:#FFE3E3;color:#9b1c1c}
+
+  .stats{display:flex;background:var(--surface);border-bottom:1px solid var(--line);flex-shrink:0}
+  .stat{flex:1;padding:7px 4px;text-align:center;border-right:1px solid var(--line)}
+  .stat:last-child{border-right:none}
+  .stat b{display:block;font-size:17px;font-weight:800;line-height:1}
+  .stat span{font-size:9.5px;color:var(--ink2);text-transform:uppercase;letter-spacing:.4px;font-weight:700}
+
+  .tabs{display:flex;background:var(--surface);border-bottom:1px solid var(--line);flex-shrink:0}
+  .tab{flex:1;padding:11px 4px;background:none;font-size:12.5px;font-weight:700;color:var(--ink2);
+    border-bottom:3px solid transparent}
+  .tab.active{color:var(--primary);border-bottom-color:var(--primary)}
+
+  main{flex:1;position:relative;overflow:hidden}
+  .view{position:absolute;inset:0;overflow-y:auto;-webkit-overflow-scrolling:touch;display:none}
+  .view.active{display:block}
+  #map{position:absolute;inset:0}
+
+  .radius-ctl{position:absolute;left:12px;right:12px;bottom:12px;background:var(--surface);
+    border-radius:14px;padding:10px 14px;box-shadow:var(--shadow-lg);z-index:500}
+  .radius-ctl .row{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+  .radius-ctl label{font-size:12px;font-weight:700;color:var(--ink2)}
+  .radius-ctl b{font-size:15px;color:var(--primary)}
+  .radius-ctl input[type=range]{width:100%;accent-color:var(--primary)}
+  .map-btns{position:absolute;right:12px;top:12px;z-index:500;display:flex;flex-direction:column;gap:8px}
+  .map-btn{width:44px;height:44px;border-radius:12px;background:var(--surface);box-shadow:var(--shadow-lg);
+    font-size:20px;display:flex;align-items:center;justify-content:center}
+  .map-btn.active{background:var(--primary);color:#fff}
+
+  .list-wrap{padding:10px 10px 90px}
+  .filtros{display:flex;gap:7px;padding:9px 10px;overflow-x:auto;background:var(--surface);
+    border-bottom:1px solid var(--line);position:sticky;top:0;z-index:10;-webkit-overflow-scrolling:touch}
+  .filtros::-webkit-scrollbar{display:none}
+  .chip{background:#eef2f7;color:var(--ink2);font-size:12.5px;font-weight:700;padding:7px 13px;
+    border-radius:20px;white-space:nowrap;flex-shrink:0}
+  .chip.on{background:var(--ink);color:#fff}
+  .seg-tag{display:inline-flex;align-items:center;font-weight:700;padding:2px 8px;border-radius:20px;
+    font-size:11px;color:var(--ink2);border:1.5px solid var(--line);background:#fff}
+  .empty{text-align:center;color:var(--ink2);padding:50px 24px;font-size:14px;line-height:1.6}
+  .empty .big{font-size:40px;margin-bottom:8px}
+
+  .pdv{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px;
+    margin-bottom:9px;box-shadow:var(--shadow);display:flex;gap:11px;align-items:flex-start}
+  .pdv .flag{width:5px;align-self:stretch;border-radius:3px;flex-shrink:0}
+  .pdv .body{flex:1;min-width:0;cursor:pointer}
+  .pdv .nome{font-weight:800;font-size:14.5px;margin-bottom:2px;line-height:1.25}
+  .pdv .cod{font-size:11px;font-weight:700;color:var(--ink2);font-family:ui-monospace,Menlo,monospace;margin-bottom:4px}
+  .edit-hint{font-size:11px;font-weight:600;color:var(--primary);opacity:.75}
+  .pdv .meta{font-size:12px;color:var(--ink2);display:flex;flex-wrap:wrap;gap:5px 10px;align-items:center}
+  .cat-tag{display:inline-flex;align-items:center;font-weight:700;padding:2px 8px;border-radius:20px;font-size:11px;color:#fff}
+  .dist{font-weight:800}
+  .dist.near{color:var(--ader)}
+  .badge-in{background:var(--ader);color:#fff;font-size:10px;font-weight:800;padding:2px 7px;border-radius:20px}
+  .badge-done{background:#e8f0ff;color:var(--primary);font-size:10px;font-weight:800;padding:2px 7px;border-radius:20px}
+  .pdv .go{background:var(--primary);color:#fff;font-weight:800;font-size:13px;padding:9px 12px;border-radius:10px;
+    white-space:nowrap;align-self:center}
+
+  .btn{background:var(--primary);color:#fff;font-weight:700;padding:11px 16px;border-radius:11px;font-size:14px}
+  .btn.ghost{background:#eef2f7;color:var(--ink)}
+  .btn.block,.btn.wide{display:block;width:100%;text-align:center}
+  .danger{background:#fff2f2;color:var(--conc);font-weight:800;padding:12px;border-radius:11px;width:100%;font-size:14px;margin-top:6px}
+
+  .fab{position:absolute;right:16px;bottom:88px;z-index:600;background:var(--ader);color:#fff;
+    width:58px;height:58px;border-radius:50%;font-size:30px;box-shadow:var(--shadow-lg);
+    display:flex;align-items:center;justify-content:center}
+
+  .sheet-bg{position:fixed;inset:0;background:rgba(11,31,51,.55);z-index:1000;display:none;align-items:flex-end;justify-content:center}
+  .sheet-bg.open{display:flex}
+  .sheet{background:var(--surface);width:100%;max-width:560px;max-height:92dvh;border-radius:20px 20px 0 0;
+    overflow-y:auto;box-shadow:var(--shadow-lg);animation:up .25s ease}
+  @keyframes up{from{transform:translateY(40px);opacity:.6}to{transform:translateY(0);opacity:1}}
+  .sheet-head{position:sticky;top:0;background:var(--surface);padding:16px 18px 10px;border-bottom:1px solid var(--line);
+    display:flex;align-items:center;gap:10px;z-index:2}
+  .sheet-head h2{font-size:17px;font-weight:800;margin:0;flex:1}
+  .x{background:#eef2f7;width:34px;height:34px;border-radius:50%;font-size:18px;color:var(--ink2);flex-shrink:0}
+  .sheet-body{padding:16px 18px 24px}
+  .field{margin-bottom:14px}
+  .field label{display:block;font-size:12px;font-weight:700;color:var(--ink2);margin-bottom:5px;text-transform:uppercase;letter-spacing:.3px}
+  .field input,.field select,.field textarea{width:100%;padding:11px;border:1.5px solid var(--line);border-radius:10px;background:#fafbfc}
+  .field textarea{min-height:70px;resize:vertical}
+
+  .crit{display:flex;align-items:center;gap:11px;padding:11px 12px;border:1.5px solid var(--line);
+    border-radius:11px;margin-bottom:8px;background:#fafbfc;user-select:none}
+  .crit.on{border-color:var(--ader);background:#f0fbf4}
+  .crit .cbx{width:26px;height:26px;border-radius:7px;border:2px solid var(--line);flex-shrink:0;
+    display:flex;align-items:center;justify-content:center;font-size:16px;color:#fff}
+  .crit.on .cbx{background:var(--ader);border-color:var(--ader)}
+  .crit .txt{flex:1;font-size:14px;font-weight:600}
+
+  .score-box{text-align:center;padding:14px;background:#f0f5ff;border-radius:14px;margin-bottom:14px}
+  .score-box .n{font-size:38px;font-weight:800;color:var(--primary);line-height:1}
+  .score-box .l{font-size:11px;color:var(--ink2);font-weight:700;text-transform:uppercase;letter-spacing:.5px}
+  .checkin-status{font-size:13px;font-weight:800;padding:8px;border-radius:10px;text-align:center;margin-bottom:14px}
+  .checkin-status.in{background:#e6f7ee;color:var(--ader)}
+  .checkin-status.out{background:#fff2f2;color:var(--conc)}
+  .stars{display:flex;gap:6px;justify-content:center;font-size:34px}
+  .stars span{color:#d8e0ea;cursor:pointer}
+  .stars span.on{color:var(--neutro)}
+
+  .maptbl{width:100%;font-size:13px}
+  .maptbl td{padding:6px 4px}
+  .cat-edit{display:flex;align-items:center;gap:10px;padding:9px;border:1px solid var(--line);border-radius:10px;margin-bottom:8px}
+  .cat-edit input[type=color]{width:40px;height:40px;border:none;background:none;padding:0}
+  .cat-edit input[type=text]{flex:1;padding:9px;border:1.5px solid var(--line);border-radius:9px}
+  .hint{font-size:12px;color:var(--ink2);line-height:1.55;margin:4px 0 14px}
+  .crit-manage{display:flex;gap:8px;align-items:center;margin-bottom:8px}
+  .crit-manage input{flex:1;padding:9px;border:1.5px solid var(--line);border-radius:9px}
+  .crit-manage .del{background:#fff2f2;color:var(--conc);width:38px;height:38px;border-radius:9px;font-size:18px;flex-shrink:0}
+  .divider{height:1px;background:var(--line);margin:18px 0 14px}
+  .sec-title{font-size:12px;font-weight:800;color:var(--ink2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px}
+  .hist{border-left:3px solid var(--line);padding:8px 0 8px 11px;margin-bottom:8px}
+  .hist .top{display:flex;justify-content:space-between;gap:8px;margin-bottom:3px;align-items:center}
+  .hist .dt{font-size:12px;font-weight:700;color:var(--ink2)}
+  .hist .sc{font-size:13px;font-weight:800;color:var(--primary)}
+  .hist .det{font-size:12px;color:var(--ink2);line-height:1.45}
+  .hist .who{font-size:11.5px;font-weight:800;color:var(--primary)}
+  .hist .del{background:none;color:var(--conc);font-size:11px;font-weight:700;padding:2px 0}
+
+  .rank{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:9px;
+    box-shadow:var(--shadow);display:flex;align-items:center;gap:12px}
+  .rank .pos{font-size:18px;font-weight:800;color:var(--ink2);width:24px;text-align:center}
+  .rank .info{flex:1;min-width:0}
+  .rank .nm{font-weight:800;font-size:14px}
+  .rank .sub{font-size:11.5px;color:var(--ink2)}
+  .rank .val{font-size:20px;font-weight:800;color:var(--primary)}
+
+  .toast{position:fixed;bottom:26px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;
+    padding:12px 20px;border-radius:30px;font-size:13.5px;font-weight:700;z-index:3000;box-shadow:var(--shadow-lg);
+    opacity:0;transition:opacity .25s;pointer-events:none;max-width:90vw;text-align:center}
+  .toast.show{opacity:1}
+  .leaflet-container{background:#e8edf2}
+
+  #login{position:fixed;inset:0;z-index:5000;background:linear-gradient(160deg,#0B1F33 0%,#123A5E 100%);
+    display:flex;align-items:center;justify-content:center;padding:24px}
+  #login.hide{display:none}
+  .login-card{width:100%;max-width:360px;text-align:center;color:#fff}
+  .login-logo{width:70px;height:70px;border-radius:20px;background:rgba(255,255,255,.1);margin:0 auto 18px;
+    display:flex;align-items:center;justify-content:center;font-size:34px}
+  .login-card h2{font-size:22px;font-weight:800;margin:0 0 4px}
+  .login-card p{font-size:13px;opacity:.65;margin:0 0 26px}
+  .login-card input{width:100%;padding:14px;border:none;border-radius:12px;margin-bottom:11px;
+    background:rgba(255,255,255,.12);color:#fff;font-size:16px;outline:none}
+  .login-card input::placeholder{color:rgba(255,255,255,.5)}
+  .login-card input:focus{background:rgba(255,255,255,.2);box-shadow:0 0 0 2px rgba(255,255,255,.35)}
+  .login-card button{width:100%;padding:14px;border-radius:12px;background:#fff;color:#0B1F33;font-weight:800;font-size:15px;margin-top:6px}
+  .login-card button:disabled{opacity:.6}
+  .login-err{font-size:13px;font-weight:700;color:#FF8A8A;min-height:34px;margin-top:10px;line-height:1.4}
+  .login-foot{font-size:11px;opacity:.4;margin-top:20px}
+  .logout{background:none;color:#8fa6bd;font-size:11px;font-weight:700;padding:4px 6px}
+  .boot{position:fixed;inset:0;z-index:5500;background:#0B1F33;color:#fff;display:flex;align-items:center;
+    justify-content:center;font-size:14px;font-weight:700;opacity:.95}
+  .boot.hide{display:none}
+</style>
+</head>
+<body>
+
+<div class="boot" id="boot">Conectando…</div>
+
+<div id="login" class="hide">
+  <div class="login-card">
+    <div class="login-logo">📍</div>
+    <h2>Indicador de PDV</h2>
+    <p>Check-in e pontuação de ponto de venda</p>
+    <input type="text" id="lgUser" placeholder="Usuário" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false">
+    <input type="password" id="lgPass" placeholder="Senha" autocomplete="current-password">
+    <button id="lgBtn">Entrar</button>
+    <div class="login-err" id="lgErr"></div>
+    <div class="login-foot">Uso interno · Virginia</div>
+  </div>
+</div>
+
+<header>
+  <h1>Indicador de PDV</h1>
+  <div class="gps-pill"><span class="gps-dot" id="gpsDot"></span><span id="gpsTxt">Sem GPS</span></div>
+  <div class="avatar" id="avatar" title="Sair">–</div>
+</header>
+
+<div class="syncbar" id="syncbar"></div>
+
+<div class="stats">
+  <div class="stat"><b id="stTotal">0</b><span>PDVs</span></div>
+  <div class="stat"><b id="stConc" style="color:var(--conc)">0</b><span>Concorr.</span></div>
+  <div class="stat"><b id="stAder" style="color:var(--ader)">0</b><span>Aderidos</span></div>
+  <div class="stat"><b id="stAval" style="color:var(--primary)">0</b><span>Check-ins</span></div>
+</div>
+
+<div class="tabs">
+  <button class="tab active" data-view="mapa">🗺️ Mapa</button>
+  <button class="tab" data-view="lista">📋 Próximos</button>
+  <button class="tab" data-view="equipe">👥 Equipe</button>
+  <button class="tab" data-view="dados">⚙️ Base</button>
+</div>
+
+<main>
+  <section class="view active" id="view-mapa">
+    <div id="map"></div>
+    <div class="map-btns">
+      <button class="map-btn" id="btnCenter" title="Centralizar">🎯</button>
+      <button class="map-btn" id="btnManual" title="Posição manual">📍</button>
+    </div>
+    <div class="radius-ctl">
+      <div class="row"><label>Raio de check-in</label><b id="raioVal">200 m</b></div>
+      <input type="range" id="raio" min="20" max="2000" step="10" value="200">
+    </div>
+  </section>
+
+  <section class="view" id="view-lista">
+    <div class="filtros" id="filtros"></div>
+    <div class="list-wrap" id="listWrap"></div>
+  </section>
+  <section class="view" id="view-equipe"><div class="list-wrap" id="teamWrap"></div></section>
+
+  <section class="view" id="view-dados">
+    <div class="list-wrap">
+      <button class="btn block" id="btnImport" style="margin-bottom:10px">📥 Importar base (Excel/CSV)</button>
+      <button class="btn ghost block" id="btnModelo" style="margin-bottom:10px">📄 Baixar modelo de importação</button>
+      <button class="btn ghost block" id="btnCrit" style="margin-bottom:10px">✅ Critérios de avaliação</button>
+      <button class="btn ghost block" id="btnExport" style="margin-bottom:10px">📤 Exportar resultados (Excel)</button>
+      <button class="btn ghost block" id="btnCats" style="margin-bottom:20px">🎨 Categorias e cores</button>
+      <div class="hint" style="text-align:center" id="dbInfo"></div>
+    </div>
+  </section>
+
+  <button class="fab" id="fabAdd">+</button>
+</main>
+
+<input type="file" id="fileInput" accept=".xlsx,.xls,.csv" style="display:none">
+
+<div class="sheet-bg" id="sheetBg">
+  <div class="sheet">
+    <div class="sheet-head"><h2 id="sheetTitle"></h2><button class="x" onclick="closeSheet()">✕</button></div>
+    <div class="sheet-body" id="sheetBody"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script type="module">
+/* ==================================================================
+   1. CONFIGURAÇÃO DO FIREBASE
+   ------------------------------------------------------------------
+   Projeto: indicador-pdv-virginia
+   Região do Firestore: southamerica-east1 (São Paulo)
+   ================================================================== */
+const firebaseConfig = {
+  apiKey: "AIzaSyDJBfUSlqrqhXW3xErdtTG9gELGxEw1fYo",
+  authDomain: "indicador-pdv-virginia.firebaseapp.com",
+  projectId: "indicador-pdv-virginia",
+  storageBucket: "indicador-pdv-virginia.firebasestorage.app",
+  messagingSenderId: "154866098562",
+  appId: "1:154866098562:web:31c046b74bd3c5b0a9af9b"
+};
+/* ================================================================== */
+
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged }
+  from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import {
+  initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
+  collection, doc, getDoc, setDoc, addDoc, updateDoc, deleteDoc,
+  onSnapshot, writeBatch, serverTimestamp
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+let app, auth, db;
+try{
+  app  = initializeApp(firebaseConfig);
+  auth = getAuth(app);
+  db   = initializeFirestore(app, {
+    localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
+  });
+}catch(e){
+  document.getElementById('boot').textContent =
+    'Erro na configuração do Firebase. Confira o firebaseConfig no código.';
+  throw e;
+}
+
+/* ============ ESTADO ============ */
+const PALETA = ['#E23B3B','#12A150','#F5A524','#7B61FF','#0057D9','#EC4899','#0891B2','#65A30D','#B45309','#475569'];
+const CRIT_PADRAO = [
+  'Preço negociado respeitado','Produtos gelados / na geladeira','Material de comunicação exposto',
+  'Ponto extra / exposição adicional','Sem ruptura (produto disponível)','Concorrente sem destaque indevido'
+];
+let state = { pdvs:[], cats:{}, avaliacoes:[], criterios:CRIT_PADRAO.slice(), raio:200 };
+let user = null;          // {uid, email, nome, papel}
+let me = null, manualMode = false;
+let map, meMarker, meCircle, pdvLayer;
+let unsubs = [], gpsWatch = null;
+
+/* ============ UTIL ============ */
+const $ = id => document.getElementById(id);
+function haversine(a,b,c,d){
+  const R=6371000, r=Math.PI/180, dLat=(c-a)*r, dLng=(d-b)*r;
+  const x=Math.sin(dLat/2)**2 + Math.cos(a*r)*Math.cos(c*r)*Math.sin(dLng/2)**2;
+  return 2*R*Math.asin(Math.sqrt(x));
+}
+const fmtDist = m => m==null ? '—' : (m<1000 ? Math.round(m)+' m' : (m/1000).toFixed(1)+' km');
+function toast(msg){ const t=$('toast'); t.textContent=msg; t.classList.add('show');
+  clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('show'),2800); }
+const catColor = k => (state.cats[k]&&state.cats[k].cor) || '#94A3B8';
+const catLabel = k => (state.cats[k]&&state.cats[k].label) || k || 'Sem tipo';
+const isAdmin = () => user && user.papel==='admin';
+function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+/* ============ INDICADOR DE CONEXÃO ============ */
+let pendentes = 0;
+function updateSync(){
+  const bar=$('syncbar');
+  if(!navigator.onLine){
+    bar.className='syncbar show off';
+    bar.textContent = pendentes
+      ? `📴 Sem conexão · ${pendentes} registro(s) na fila, sincronizam quando o sinal voltar`
+      : '📴 Sem conexão · você pode continuar trabalhando normalmente';
+  } else if(pendentes){
+    bar.className='syncbar show';
+    bar.textContent=`⏳ Sincronizando ${pendentes} registro(s)...`;
+  } else bar.className='syncbar';
+}
+window.addEventListener('online', ()=>{ updateSync(); toast('Conexão restabelecida'); });
+window.addEventListener('offline', updateSync);
+
+/* ============ AUTENTICAÇÃO ============ */
+// O Firebase exige e-mail, mas o usuário digita só o nome.
+// O domínio abaixo é completado automaticamente.
+const DOMINIO_LOGIN = 'virginia.com.br';
+const montarEmail = txt => txt.includes('@') ? txt : `${txt}@${DOMINIO_LOGIN}`;
+
+$('lgBtn').onclick = fazerLogin;
+$('lgPass').addEventListener('keydown', e=>{ if(e.key==='Enter') fazerLogin(); });
+$('lgUser').addEventListener('keydown', e=>{ if(e.key==='Enter') $('lgPass').focus(); });
+
+async function fazerLogin(){
+  const digitado=$('lgUser').value.trim().toLowerCase(), senha=$('lgPass').value;
+  if(!digitado || !senha){ $('lgErr').textContent='Preencha usuário e senha'; return; }
+  const email = montarEmail(digitado);
+  $('lgBtn').disabled=true; $('lgBtn').textContent='Entrando...'; $('lgErr').textContent='';
+  try{
+    await signInWithEmailAndPassword(auth, email, senha);
+  }catch(err){
+    const msgs={
+      'auth/invalid-credential':'Usuário ou senha incorretos',
+      'auth/invalid-email':'Usuário inválido',
+      'auth/user-not-found':'Usuário não cadastrado',
+      'auth/wrong-password':'Senha incorreta',
+      'auth/too-many-requests':'Muitas tentativas. Espere alguns minutos',
+      'auth/network-request-failed':'Sem conexão com a internet',
+      'auth/unauthorized-domain':'Este domínio não está autorizado no Firebase (Parte 6 do guia)'
+    };
+    $('lgErr').textContent = msgs[err.code] || ('Erro: '+err.code);
+    $('lgPass').value='';
+  }finally{
+    $('lgBtn').disabled=false; $('lgBtn').textContent='Entrar';
+  }
+}
+
+$('avatar').onclick = ()=>{
+  openSheet('Sua conta', `
+    <div class="hint">
+      <b>${esc(user?.nome||'')}</b><br>Usuário: <b>${esc((user?.email||'').split('@')[0])}</b><br>
+      Perfil: <b>${user?.papel==='admin'?'Administrador':'Vendedor'}</b>
+    </div>
+    <button class="danger" id="btnSair">Sair da conta</button>`);
+  $('btnSair').onclick = async()=>{ closeSheet(); await signOut(auth); };
+};
+
+onAuthStateChanged(auth, async (u)=>{
+  unsubs.forEach(f=>f()); unsubs=[];
+  if(!u){
+    user=null;
+    $('boot').classList.add('hide');
+    $('login').classList.remove('hide');
+    if(gpsWatch!==null){ navigator.geolocation.clearWatch(gpsWatch); gpsWatch=null; }
+    return;
+  }
+  $('boot').classList.remove('hide');
+  $('boot').textContent='Carregando seus dados…';
+  try{
+    const perfil = await getDoc(doc(db,'usuarios',u.uid));
+    if(!perfil.exists()){
+      await signOut(auth);
+      $('boot').classList.add('hide');
+      $('login').classList.remove('hide');
+      $('lgErr').innerHTML='Sua conta existe, mas falta o cadastro no banco.<br>Peça ao administrador para criar o documento em <b>usuarios</b> com o seu UID.';
+      return;
+    }
+    const d=perfil.data();
+    user={uid:u.uid, email:u.email, nome:d.nome||u.email.split('@')[0], papel:d.papel||'vendedor'};
+    $('avatar').textContent = user.nome.slice(0,2).toUpperCase();
+    $('login').classList.add('hide');
+    $('boot').classList.add('hide');
+    iniciarEscutas();
+    startGPS();
+    setTimeout(()=>map&&map.invalidateSize(),80);
+  }catch(err){
+    console.error(err);
+    $('boot').classList.add('hide');
+    $('login').classList.remove('hide');
+    $('lgErr').textContent='Erro de permissão ao ler seu perfil. Confira as regras do Firestore.';
+    await signOut(auth);
+  }
+});
+
+/* ============ SINCRONIZAÇÃO EM TEMPO REAL ============ */
+function iniciarEscutas(){
+  // Configuração compartilhada
+  unsubs.push(onSnapshot(doc(db,'config','geral'), snap=>{
+    if(snap.exists()){
+      const d=snap.data();
+      state.cats = d.cats || {};
+      state.criterios = (d.criterios && d.criterios.length) ? d.criterios : CRIT_PADRAO.slice();
+      if(d.raio && !state._raioLocal){ state.raio=d.raio; $('raio').value=d.raio; $('raioVal').textContent=d.raio+' m'; }
+    } else if(isAdmin()){
+      setDoc(doc(db,'config','geral'), {cats:{}, criterios:CRIT_PADRAO.slice(), raio:200});
+    }
+    refreshAll();
+  }, err=>console.error('config:',err)));
+
+  // PDVs
+  unsubs.push(onSnapshot(collection(db,'pdvs'), snap=>{
+    state.pdvs = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    pendentes = snap.docs.filter(d=>d.metadata.hasPendingWrites).length;
+    updateSync(); refreshAll();
+    $('dbInfo').innerHTML = `Banco: <b>${firebaseConfig.projectId}</b><br>${state.pdvs.length} PDVs · ${state.avaliacoes.length} check-ins · dados compartilhados com a equipe`;
+  }, err=>{ console.error('pdvs:',err); toast('Sem permissão para ler os PDVs'); }));
+
+  // Check-ins
+  unsubs.push(onSnapshot(collection(db,'checkins'), snap=>{
+    state.avaliacoes = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    pendentes += snap.docs.filter(d=>d.metadata.hasPendingWrites).length;
+    updateSync(); refreshAll();
+  }, err=>console.error('checkins:',err)));
+}
+
+async function salvarConfig(){
+  if(!isAdmin()){ toast('Só o administrador altera categorias e critérios'); return false; }
+  try{
+    await setDoc(doc(db,'config','geral'),
+      {cats:state.cats, criterios:state.criterios, raio:state.raio}, {merge:true});
+    return true;
+  }catch(e){ toast('Erro ao salvar configuração'); return false; }
+}
+
+/* ============ MAPA ============ */
+function initMap(){
+  map = L.map('map',{zoomControl:false}).setView([-25.0945,-50.1633],13);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(map);
+  L.control.zoom({position:'bottomright'}).addTo(map);
+  pdvLayer = L.layerGroup().addTo(map);
+  map.on('click', e=>{ if(manualMode){ setMe(e.latlng.lat,e.latlng.lng,15); toggleManual(false); toast('Posição definida manualmente'); }});
+}
+function drawPdvs(){
+  if(!pdvLayer) return;
+  pdvLayer.clearLayers();
+  state.pdvs.forEach(p=>{
+    if(p.lat==null||p.lng==null) return;
+    if(!passaFiltro(p)) return;
+    const feito = state.avaliacoes.some(a=>a.pdvId===p.id);
+    const d = me ? haversine(me.lat,me.lng,p.lat,p.lng) : null;
+    L.circleMarker([p.lat,p.lng],{radius:8,color:'#fff',weight:2,fillColor:catColor(p.cat),fillOpacity:1})
+      .bindPopup(`<b>${esc(p.nome)}</b>${p.codigo?`<br><code>${esc(p.codigo)}</code>`:''}<br>${esc(catLabel(p.cat))}
+        ${p.segmento?`<br>🏪 ${esc(p.segmento)}`:''}<br>
+        ${d!=null?'📍 '+fmtDist(d):''} ${feito?'<br>✅ avaliado':''}
+        <br><a href="#" onclick="openCheckin('${p.id}');return false;" style="color:#0057D9;font-weight:700">Fazer check-in »</a>
+        &nbsp;·&nbsp;<a href="#" onclick="openPdv('${p.id}');return false;" style="color:#40566E;font-weight:700">Editar</a>`)
+      .addTo(pdvLayer);
+  });
+}
+function setMe(lat,lng,acc){
+  me={lat,lng,acc:acc||0};
+  if(map){
+    if(!meMarker) meMarker=L.circleMarker([lat,lng],{radius:9,color:'#fff',weight:3,fillColor:'#0057D9',fillOpacity:1}).addTo(map);
+    else meMarker.setLatLng([lat,lng]);
+    if(!meCircle) meCircle=L.circle([lat,lng],{radius:state.raio,color:'#0057D9',weight:1.5,fillColor:'#0057D9',fillOpacity:.08}).addTo(map);
+    else { meCircle.setLatLng([lat,lng]); meCircle.setRadius(state.raio); }
+  }
+  drawPdvs();
+  if($('view-lista').classList.contains('active')) renderList();
+}
+function startGPS(){
+  const dot=$('gpsDot'), txt=$('gpsTxt');
+  if(!navigator.geolocation){ dot.className='gps-dot err'; txt.textContent='GPS indisponível'; return; }
+  if(gpsWatch!==null) return;
+  gpsWatch = navigator.geolocation.watchPosition(
+    pos=>{ if(manualMode) return;
+      dot.className='gps-dot on'; txt.textContent='GPS ativo';
+      setMe(pos.coords.latitude,pos.coords.longitude,pos.coords.accuracy); },
+    err=>{ dot.className='gps-dot err'; txt.textContent = err.code===1?'GPS negado':'Sem sinal'; },
+    {enableHighAccuracy:true, maximumAge:5000, timeout:15000}
+  );
+}
+function toggleManual(force){
+  manualMode = force===undefined ? !manualMode : force;
+  $('btnManual').classList.toggle('active', manualMode);
+  if(manualMode) toast('Toque no mapa para marcar sua posição');
+}
+
+/* ============ TABS ============ */
+document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+  document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));
+  t.classList.add('active');
+  const v=t.dataset.view;
+  $('view-'+v).classList.add('active');
+  if(v==='mapa'&&map) setTimeout(()=>map.invalidateSize(),50);
+  if(v==='lista') renderList();
+  if(v==='equipe') renderTeam();
+});
+
+/* ============ LISTA ============ */
+let filtroSeg = '__todos';
+function segmentosUnicos(){
+  return [...new Set(state.pdvs.map(p=>(p.segmento||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+}
+function renderFiltros(){
+  const segs=segmentosUnicos();
+  const box=$('filtros');
+  if(!segs.length){ box.innerHTML=''; box.style.display='none'; return; }
+  box.style.display='flex';
+  const semSeg = state.pdvs.some(p=>!(p.segmento||'').trim());
+  box.innerHTML =
+    `<button class="chip ${filtroSeg==='__todos'?'on':''}" onclick="setFiltro('__todos')">Todos (${state.pdvs.length})</button>` +
+    segs.map(s=>{
+      const n=state.pdvs.filter(p=>(p.segmento||'').trim()===s).length;
+      return `<button class="chip ${filtroSeg===s?'on':''}" onclick="setFiltro('${esc(s).replace(/'/g,"\\'")}')">${esc(s)} (${n})</button>`;
+    }).join('') +
+    (semSeg?`<button class="chip ${filtroSeg==='__sem'?'on':''}" onclick="setFiltro('__sem')">Sem segmento</button>`:'');
+}
+function setFiltro(s){ filtroSeg=s; renderFiltros(); renderList(); drawPdvs(); }
+function passaFiltro(p){
+  if(filtroSeg==='__todos') return true;
+  if(filtroSeg==='__sem') return !(p.segmento||'').trim();
+  return (p.segmento||'').trim()===filtroSeg;
+}
+
+function renderList(){
+  renderFiltros();
+  const wrap=$('listWrap');
+  if(!state.pdvs.length){
+    wrap.innerHTML=`<div class="empty"><div class="big">📍</div>Nenhum PDV cadastrado no banco ainda.<br>
+      Importe sua planilha na aba <b>Base</b> ou toque no <b>+</b> para indicar um PDV na sua posição.</div>`;
+    return;
+  }
+  const filtrados=state.pdvs.filter(passaFiltro);
+  if(!filtrados.length){
+    wrap.innerHTML=`<div class="empty"><div class="big">🔎</div>Nenhum PDV neste segmento.</div>`;
+    return;
+  }
+  const arr=filtrados.map(p=>({p, d: me?haversine(me.lat,me.lng,p.lat,p.lng):null}));
+  arr.sort((a,b)=>(a.d==null?1e12:a.d)-(b.d==null?1e12:b.d));
+  wrap.innerHTML=arr.map(({p,d})=>{
+    const dentro = d!=null && d<=state.raio;
+    const feito = state.avaliacoes.some(a=>a.pdvId===p.id);
+    return `<div class="pdv">
+      <div class="flag" style="background:${catColor(p.cat)}"></div>
+      <div class="body" onclick="openPdv('${p.id}')">
+        <div class="nome">${esc(p.nome)} <span class="edit-hint">editar ›</span></div>
+        ${p.codigo?`<div class="cod">${esc(p.codigo)}</div>`:''}
+        <div class="meta">
+          <span class="cat-tag" style="background:${catColor(p.cat)}">${esc(catLabel(p.cat))}</span>
+          ${p.segmento?`<span class="seg-tag">${esc(p.segmento)}</span>`:''}
+          <span class="dist ${dentro?'near':''}">${d!=null?fmtDist(d):'sem GPS'}</span>
+          ${dentro?'<span class="badge-in">no raio</span>':''}
+          ${feito?'<span class="badge-done">✓ avaliado</span>':''}
+        </div>
+      </div>
+      <button class="go" onclick="openCheckin('${p.id}')">Check-in</button>
+    </div>`;
+  }).join('');
+}
+
+/* ============ EQUIPE ============ */
+function renderTeam(){
+  const wrap=$('teamWrap');
+  if(!state.avaliacoes.length){
+    wrap.innerHTML=`<div class="empty"><div class="big">👥</div>Nenhum check-in registrado ainda.<br>
+      Assim que a equipe começar a rodar, o desempenho de cada um aparece aqui.</div>`;
+    return;
+  }
+  const porPessoa={};
+  state.avaliacoes.forEach(a=>{
+    const k=a.userNome||'Sem identificação';
+    if(!porPessoa[k]) porPessoa[k]={n:0, soma:0, dentro:0};
+    porPessoa[k].n++; porPessoa[k].soma+=(a.score||0);
+    if(a.dentro) porPessoa[k].dentro++;
+  });
+  const arr=Object.entries(porPessoa).map(([nome,v])=>({
+    nome, n:v.n, media:Math.round(v.soma/v.n), pctDentro:Math.round(v.dentro/v.n*100)
+  })).sort((a,b)=>b.n-a.n);
+
+  const hoje=new Date().toISOString().slice(0,10);
+  const hojeN=state.avaliacoes.filter(a=>(a.ts||'').slice(0,10)===hoje).length;
+
+  wrap.innerHTML = `
+    <div class="sec-title">Resumo geral</div>
+    <div class="rank"><div class="pos">📊</div><div class="info">
+      <div class="nm">${state.avaliacoes.length} check-ins no total</div>
+      <div class="sub">${hojeN} registrados hoje</div></div></div>
+    <div class="divider"></div>
+    <div class="sec-title">Por pessoa</div>` +
+    arr.map((r,i)=>`<div class="rank">
+      <div class="pos">${i+1}º</div>
+      <div class="info">
+        <div class="nm">${esc(r.nome)}</div>
+        <div class="sub">${r.n} check-in(s) · ${r.pctDentro}% dentro do raio</div>
+      </div>
+      <div class="val">${r.media}%</div>
+    </div>`).join('') +
+    `<div class="hint" style="margin-top:14px">O percentual grande é a <b>média do score de execução</b>. O "dentro do raio" mostra quantos check-ins foram feitos de fato na porta do PDV.</div>`;
+}
+
+/* ============ STATS ============ */
+function refreshStats(){
+  $('stTotal').textContent=state.pdvs.length;
+  $('stConc').textContent=state.pdvs.filter(p=>/conc|hein/i.test(catLabel(p.cat))).length;
+  $('stAder').textContent=state.pdvs.filter(p=>/ader|negoc/i.test(catLabel(p.cat))).length;
+  $('stAval').textContent=state.avaliacoes.length;
+}
+function refreshAll(){
+  drawPdvs();
+  if($('view-lista').classList.contains('active')) renderList();
+  if($('view-equipe').classList.contains('active')) renderTeam();
+  refreshStats();
+  if(meCircle) meCircle.setRadius(state.raio);
+}
+
+/* ============ SHEET ============ */
+function openSheet(title, html){
+  $('sheetTitle').textContent=title; $('sheetBody').innerHTML=html;
+  $('sheetBg').classList.add('open');
+}
+function closeSheet(){ $('sheetBg').classList.remove('open'); }
+$('sheetBg').onclick=e=>{ if(e.target.id==='sheetBg') closeSheet(); };
+
+/* ============ CHECK-IN ============ */
+let currentPdv=null, currentCrit=new Set(), currentNota=0;
+function openCheckin(id){
+  const p=state.pdvs.find(x=>x.id===id); if(!p) return;
+  currentPdv=p; currentCrit=new Set(); currentNota=0;
+  const d = me?haversine(me.lat,me.lng,p.lat,p.lng):null;
+  const dentro = d!=null && d<=state.raio;
+  const status = d==null
+    ? `<div class="checkin-status out">Sem GPS — será registrado como fora do raio</div>`
+    : dentro ? `<div class="checkin-status in">✓ Dentro do raio (${fmtDist(d)} do PDV)</div>`
+             : `<div class="checkin-status out">Fora do raio (${fmtDist(d)} do PDV, raio ${state.raio} m)</div>`;
+  openSheet('Check-in: '+p.nome, `
+    ${status}
+    <div class="score-box"><div class="n" id="scoreN">0%</div><div class="l">Score de execução</div></div>
+    <div class="field"><label>Critérios atendidos</label>
+      ${state.criterios.map((c,i)=>`<div class="crit" onclick="toggleCrit(${i},this)"><div class="cbx">✓</div><div class="txt">${esc(c)}</div></div>`).join('')}
+    </div>
+    <div class="field"><label>Nota geral do PDV</label>
+      <div class="stars" id="stars">${[1,2,3,4,5].map(n=>`<span onclick="setNota(${n})" data-n="${n}">★</span>`).join('')}</div></div>
+    <div class="field"><label>Observações</label><textarea id="obs" placeholder="Ex.: gôndola do concorrente maior, negociar ponto extra..."></textarea></div>
+    <button class="btn wide" id="btnSaveCk">Registrar check-in</button>
+  `);
+  $('btnSaveCk').onclick=saveCheckin;
+  updateScore();
+}
+function toggleCrit(i,el){
+  if(currentCrit.has(i)){currentCrit.delete(i);el.classList.remove('on');}
+  else{currentCrit.add(i);el.classList.add('on');}
+  updateScore();
+}
+function setNota(n){ currentNota=n; document.querySelectorAll('#stars span').forEach(s=>s.classList.toggle('on',+s.dataset.n<=n)); }
+function updateScore(){ $('scoreN').textContent=Math.round(currentCrit.size/(state.criterios.length||1)*100)+'%'; }
+
+async function saveCheckin(){
+  const p=currentPdv, d=me?haversine(me.lat,me.lng,p.lat,p.lng):null;
+  const btn=$('btnSaveCk'); btn.disabled=true; btn.textContent='Registrando...';
+  const reg={
+    pdvId:p.id, pdvNome:p.nome, pdvCodigo:p.codigo||'', pdvSegmento:p.segmento||'',
+    uid:user.uid, userNome:user.nome,
+    ts:new Date().toISOString(),
+    uLat:me?me.lat:null, uLng:me?me.lng:null,
+    dist:d!=null?Math.round(d):null, dentro:(d!=null&&d<=state.raio),
+    score:Math.round(currentCrit.size/(state.criterios.length||1)*100),
+    nota:currentNota, criterios:[...currentCrit].map(i=>state.criterios[i]),
+    obs:$('obs').value.trim(), criadoEm:serverTimestamp()
+  };
+  // Não usamos await: offline a promessa só resolve quando sincroniza.
+  addDoc(collection(db,'checkins'), reg).catch(e=>{ console.error(e); toast('Erro ao salvar check-in'); });
+  closeSheet();
+  toast(navigator.onLine ? '✅ Check-in registrado em '+p.nome : '📴 Check-in salvo · sincroniza quando o sinal voltar');
+}
+
+/* ============ ADICIONAR PDV ============ */
+$('fabAdd').onclick=()=>{
+  if(!me){ toast('Ative o GPS ou defina sua posição no mapa'); return; }
+  const keys=Object.keys(state.cats);
+  const catSel = keys.length
+    ? `<select id="npCat">${keys.map(k=>`<option value="${k}">${esc(catLabel(k))}</option>`).join('')}<option value="__new">+ Nova categoria...</option></select>`
+    : `<input id="npCatNew" placeholder="Ex.: Concorrência (Heineken)">`;
+  openSheet('Indicar PDV aqui', `
+    <div class="hint">Posição atual: ${me.lat.toFixed(5)}, ${me.lng.toFixed(5)}</div>
+    <div class="field"><label>Nome do PDV</label><input id="npNome" placeholder="Ex.: Bar do Zé"></div>
+    <div class="field"><label>Código do PDV (opcional)</label><input id="npCod" placeholder="Ex.: PDV-0001"></div>
+    <div class="field"><label>Segmento (opcional)</label>
+      <input id="npSeg" list="listaSeg" placeholder="Ex.: Bar, Mercado, Mercearia">
+      <datalist id="listaSeg">${segmentosUnicos().map(s=>`<option value="${esc(s)}">`).join('')}</datalist></div>
+    <div class="field"><label>Tipo / categoria</label>${catSel}
+      <input id="npCatNew2" placeholder="Nome da nova categoria" style="display:none;margin-top:8px"></div>
+    <button class="btn wide" id="btnSaveNp">Salvar PDV nesta posição</button>`);
+  const sel=$('npCat');
+  if(sel) sel.onchange=()=>$('npCatNew2').style.display = sel.value==='__new'?'block':'none';
+  $('btnSaveNp').onclick=saveNewPdv;
+};
+async function saveNewPdv(){
+  const nome=($('npNome').value||'').trim();
+  if(!nome){ toast('Informe o nome do PDV'); return; }
+  let catKey; const sel=$('npCat');
+  if(sel){
+    catKey = sel.value==='__new' ? await ensureCat(($('npCatNew2').value.trim()||'Outro')) : sel.value;
+  } else catKey = await ensureCat(($('npCatNew').value||'Outro').trim());
+  const reg={ nome, codigo:($('npCod').value||'').trim(), segmento:($('npSeg').value||'').trim(),
+    lat:me.lat, lng:me.lng,
+    tipoRaw:catLabel(catKey), cat:catKey, extra:{}, origem:'campo',
+    criadoPor:user.uid, criadoPorNome:user.nome, criadoEm:serverTimestamp() };
+  addDoc(collection(db,'pdvs'), reg).catch(e=>{ console.error(e); toast('Erro ao salvar PDV'); });
+  closeSheet();
+  toast(navigator.onLine ? 'PDV "'+nome+'" adicionado' : '📴 PDV salvo · sincroniza depois');
+}
+async function ensureCat(label){
+  const key=label.toLowerCase().trim();
+  if(!state.cats[key]){
+    const n=Object.keys(state.cats).length;
+    state.cats[key]={label, cor:PALETA[n%PALETA.length]};
+    try{ await setDoc(doc(db,'config','geral'), {cats:state.cats}, {merge:true}); }
+    catch(e){ /* vendedor sem permissão: a categoria vale localmente */ }
+  }
+  return key;
+}
+
+/* ============ DETALHE / EDIÇÃO ============ */
+function openPdv(id){
+  const p=state.pdvs.find(x=>x.id===id); if(!p) return;
+  const keys=Object.keys(state.cats);
+  const hist=state.avaliacoes.filter(a=>a.pdvId===p.id).sort((a,b)=>(b.ts||'').localeCompare(a.ts||''));
+  const histHtml = hist.length ? hist.map(a=>`
+    <div class="hist">
+      <div class="top"><span class="dt">${new Date(a.ts).toLocaleString('pt-BR')}</span><span class="sc">${a.score}%</span></div>
+      <div class="who">${esc(a.userNome||'—')}</div>
+      <div class="det">${a.dentro?'✓ dentro do raio':'✗ fora do raio'} · ${a.dist!=null?fmtDist(a.dist):'sem GPS'}
+        ${a.nota?' · nota '+a.nota+'★':''}${a.obs?'<br>'+esc(a.obs):''}</div>
+      ${(a.uid===user.uid||isAdmin())?`<button class="del" onclick="delAval('${a.id}','${p.id}')">excluir check-in</button>`:''}
+    </div>`).join('') : `<div class="hint" style="margin:0">Nenhum check-in registrado neste PDV ainda.</div>`;
+
+  const extras=Object.keys(p.extra||{}).filter(k=>String(p.extra[k]).trim()!=='');
+  const extraHtml = extras.length
+    ? `<div class="divider"></div><div class="sec-title">Dados da base</div>
+       <table class="maptbl">${extras.map(k=>`<tr><td style="color:var(--ink2)">${esc(k)}</td><td><b>${esc(p.extra[k])}</b></td></tr>`).join('')}</table>` : '';
+
+  openSheet('Editar PDV', `
+    <div class="field"><label>Nome do PDV</label><input id="edNome" value="${esc(p.nome)}"></div>
+    <div class="field"><label>Código do PDV (opcional)</label><input id="edCod" value="${esc(p.codigo||'')}"></div>
+    <div class="field"><label>Segmento (opcional)</label>
+      <input id="edSeg" value="${esc(p.segmento||'')}" list="listaSegEd" placeholder="Ex.: Bar, Mercado, Mercearia">
+      <datalist id="listaSegEd">${segmentosUnicos().map(s=>`<option value="${esc(s)}">`).join('')}</datalist></div>
+    <div class="field"><label>Tipo / categoria</label>
+      <select id="edCat">${keys.map(k=>`<option value="${k}" ${k===p.cat?'selected':''}>${esc(catLabel(k))}</option>`).join('')}<option value="__new">+ Nova categoria...</option></select>
+      <input id="edCatNew" placeholder="Nome da nova categoria" style="display:none;margin-top:8px"></div>
+    <div class="field"><label>Latitude</label><input id="edLat" value="${p.lat}" inputmode="decimal"></div>
+    <div class="field"><label>Longitude</label><input id="edLng" value="${p.lng}" inputmode="decimal"></div>
+    <button class="btn ghost wide" id="btnPos" style="margin-bottom:14px">🎯 Usar minha posição atual</button>
+    <button class="btn wide" id="btnSavePdv">Salvar alterações</button>
+    <div class="divider"></div>
+    <div class="sec-title">Histórico de check-ins (${hist.length})</div>
+    ${histHtml}${extraHtml}
+    ${isAdmin()?`<div class="divider"></div><button class="danger" id="btnDelPdv">🗑️ Excluir este PDV</button>`
+      :`<div class="divider"></div><div class="hint" style="margin:0">Só o administrador pode excluir PDVs.</div>`}
+  `);
+  const sel=$('edCat');
+  sel.onchange=()=>$('edCatNew').style.display = sel.value==='__new'?'block':'none';
+  $('btnPos').onclick=()=>{
+    if(!me){ toast('Sem posição definida'); return; }
+    $('edLat').value=me.lat.toFixed(6); $('edLng').value=me.lng.toFixed(6);
+    toast('Coordenadas atualizadas — salve para confirmar');
+  };
+  $('btnSavePdv').onclick=()=>savePdv(p.id);
+  if($('btnDelPdv')) $('btnDelPdv').onclick=()=>confirmDelPdv(p.id);
+}
+async function savePdv(id){
+  const nome=$('edNome').value.trim();
+  if(!nome){ toast('O nome não pode ficar vazio'); return; }
+  const lat=parseFloat(String($('edLat').value).replace(',','.'));
+  const lng=parseFloat(String($('edLng').value).replace(',','.'));
+  if(isNaN(lat)||isNaN(lng)){ toast('Latitude e longitude precisam ser números'); return; }
+  let catKey=$('edCat').value;
+  if(catKey==='__new'){
+    const nv=$('edCatNew').value.trim();
+    if(!nv){ toast('Dê um nome para a nova categoria'); return; }
+    catKey=await ensureCat(nv);
+  }
+  updateDoc(doc(db,'pdvs',id), {
+    nome, codigo:$('edCod').value.trim(), segmento:$('edSeg').value.trim(),
+    lat, lng, cat:catKey, tipoRaw:catLabel(catKey),
+    atualizadoPor:user.uid, atualizadoEm:serverTimestamp()
+  }).catch(e=>{ console.error(e); toast('Erro ao salvar alterações'); });
+  closeSheet(); toast('✅ PDV atualizado');
+}
+function delAval(avalId,pdvId){
+  deleteDoc(doc(db,'checkins',avalId))
+    .then(()=>{ toast('Check-in excluído'); openPdv(pdvId); })
+    .catch(()=>toast('Sem permissão para excluir este check-in'));
+}
+function confirmDelPdv(id){
+  const p=state.pdvs.find(x=>x.id===id);
+  const n=state.avaliacoes.filter(a=>a.pdvId===id).length;
+  openSheet('Excluir PDV', `
+    <div class="hint">Excluir <b>${esc(p.nome)}</b> do banco?${n?` Ele tem <b>${n} check-in(s)</b>, que ficarão órfãos no histórico.`:''} Isso afeta a equipe inteira e não dá para desfazer.</div>
+    <button class="btn wide" style="background:var(--conc)" id="btnYes">Sim, excluir</button>
+    <button class="btn ghost wide" style="margin-top:8px" id="btnNo">Cancelar</button>`);
+  $('btnYes').onclick=()=>{
+    deleteDoc(doc(db,'pdvs',id)).then(()=>{ closeSheet(); toast('PDV excluído'); })
+      .catch(()=>toast('Sem permissão para excluir'));
+  };
+  $('btnNo').onclick=()=>openPdv(id);
+}
+
+/* ============ IMPORTAÇÃO ============ */
+$('btnImport').onclick=()=>$('fileInput').click();
+$('fileInput').onchange=e=>{
+  const f=e.target.files[0]; if(!f) return;
+  const r=new FileReader();
+  r.onload=ev=>{
+    try{
+      const wb=XLSX.read(new Uint8Array(ev.target.result),{type:'array'});
+      const rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:''});
+      if(!rows.length){ toast('Planilha vazia'); return; }
+      showMapping(rows);
+    }catch(err){ toast('Erro ao ler arquivo'); console.error(err); }
+  };
+  r.readAsArrayBuffer(f); e.target.value='';
+};
+const guess=(h,re)=>h.find(x=>re.test(x))||'';
+function showMapping(rows){
+  const H=Object.keys(rows[0]);
+  const sel=(id,v)=>`<select id="${id}">${H.map(h=>`<option ${h===v?'selected':''}>${esc(h)}</option>`).join('')}</select>`;
+  const selOpt=(id,v)=>`<select id="${id}"><option value="">— nenhuma —</option>${H.map(h=>`<option ${h===v?'selected':''}>${esc(h)}</option>`).join('')}</select>`;
+  window._rows=rows;
+  openSheet('Mapear colunas', `
+    <div class="hint">Encontrei <b>${rows.length}</b> linhas. Confirme qual coluna é cada campo:</div>
+    <table class="maptbl">
+      <tr><td><b>Nome</b></td><td>${sel('mNome',guess(H,/nome|name|pdv|cliente|raz|fantasia|estabelec/i))}</td></tr>
+      <tr><td><b>Latitude</b></td><td>${sel('mLat',guess(H,/^lat|latitude/i))}</td></tr>
+      <tr><td><b>Longitude</b></td><td>${sel('mLng',guess(H,/^lon|^lng|longitude/i))}</td></tr>
+      <tr><td><b>Tipo</b></td><td>${selOpt('mTipo',guess(H,/tipo|type|categoria|status|classif|perfil/i))}</td></tr>
+      <tr><td><b>Segmento</b><br><span style="font-size:11px;color:var(--ink2);font-weight:400">opcional · canal</span></td>
+          <td>${selOpt('mSeg',guess(H,/segmento|canal|ramo|atividade|natureza|sub.?canal|giro/i))}</td></tr>
+      <tr><td><b>Código</b><br><span style="font-size:11px;color:var(--ink2);font-weight:400">opcional</span></td>
+          <td>${selOpt('mCod',guess(H,/c[oó]d|codigo|id.?pdv|pdv.?id|cnpj/i))}</td></tr>
+    </table>
+    <div class="hint" style="margin-top:14px">⚠️ Estes PDVs vão para o banco compartilhado e <b>todo mundo da equipe vai enxergar</b>.</div>
+    <button class="btn wide" id="btnRun">Importar ${rows.length} PDVs</button>`);
+  $('btnRun').onclick=runImport;
+}
+async function runImport(){
+  const rows=window._rows||[];
+  const cN=$('mNome').value, cLat=$('mLat').value, cLng=$('mLng').value,
+        cT=$('mTipo').value, cC=$('mCod').value, cS=$('mSeg').value;
+  const btn=$('btnRun'); btn.disabled=true;
+  const validos=[]; let skip=0;
+  for(const row of rows){
+    const lat=parseFloat(String(row[cLat]).replace(',','.'));
+    const lng=parseFloat(String(row[cLng]).replace(',','.'));
+    const nome=String(row[cN]||'').trim();
+    if(!nome||isNaN(lat)||isNaN(lng)){ skip++; continue; }
+    const tipoRaw = cT ? String(row[cT]||'Sem tipo').trim() : 'Sem tipo';
+    const catKey = await ensureCat(tipoRaw||'Sem tipo');
+    const extra={}; Object.keys(row).forEach(k=>{ if(![cN,cLat,cLng,cT,cC,cS].includes(k)) extra[k]=row[k]; });
+    validos.push({ nome, codigo: cC?String(row[cC]||'').trim():'',
+      segmento: cS?String(row[cS]||'').trim():'',
+      lat, lng, tipoRaw, cat:catKey,
+      extra, origem:'importado', criadoPor:user.uid, criadoPorNome:user.nome });
+  }
+  // Firestore aceita no máximo 500 operações por lote
+  try{
+    for(let i=0;i<validos.length;i+=450){
+      btn.textContent=`Enviando ${Math.min(i+450,validos.length)}/${validos.length}...`;
+      const batch=writeBatch(db);
+      validos.slice(i,i+450).forEach(v=>batch.set(doc(collection(db,'pdvs')), v));
+      await batch.commit();
+    }
+    closeSheet();
+    toast(`✅ ${validos.length} PDVs importados${skip?` (${skip} ignorados)`:''}`);
+    if(validos.length&&map){ setTimeout(()=>{
+      const pts=state.pdvs.filter(p=>p.lat).map(p=>[p.lat,p.lng]);
+      if(pts.length) map.fitBounds(pts,{padding:[40,40],maxZoom:15});
+    },700); }
+  }catch(e){
+    console.error(e); btn.disabled=false; btn.textContent='Tentar novamente';
+    toast('Erro ao enviar. Confira sua conexão e as permissões.');
+  }
+}
+
+/* ============ CATEGORIAS ============ */
+$('btnCats').onclick=()=>{
+  const keys=Object.keys(state.cats);
+  if(!keys.length){ openSheet('Categorias', `<div class="hint">Nenhuma categoria ainda. Elas são criadas ao importar a base ou adicionar um PDV.</div>`); return; }
+  openSheet('Categorias e cores',
+    (isAdmin()?'':`<div class="hint">Só o administrador pode alterar. Você está vendo em modo leitura.</div>`) +
+    keys.map(k=>`<div class="cat-edit">
+      <input type="color" value="${catColor(k)}" ${isAdmin()?`onchange="setCatColor('${k}',this.value)"`:'disabled'}>
+      <input type="text" value="${esc(catLabel(k))}" ${isAdmin()?`onchange="setCatLabel('${k}',this.value)"`:'disabled'}>
+    </div>`).join('') +
+    `<div class="hint">A cor é usada nos marcadores do mapa e nas etiquetas da lista. A mudança vale para a equipe inteira.</div>`);
+};
+async function setCatColor(k,v){ if(state.cats[k]){ state.cats[k].cor=v; if(await salvarConfig()) refreshAll(); } }
+async function setCatLabel(k,v){ if(state.cats[k]){ state.cats[k].label=v.trim()||k; if(await salvarConfig()) refreshAll(); } }
+
+/* ============ CRITÉRIOS ============ */
+$('btnCrit').onclick=renderCritSheet;
+function renderCritSheet(){
+  openSheet('Critérios de avaliação',
+    (isAdmin()?'':`<div class="hint">Só o administrador altera os critérios — assim o score continua comparável entre a equipe.</div>`) +
+    state.criterios.map((c,i)=>`<div class="crit-manage">
+      <input value="${esc(c)}" ${isAdmin()?`onchange="editCrit(${i},this.value)"`:'disabled'}>
+      ${isAdmin()?`<button class="del" onclick="delCrit(${i})">🗑️</button>`:''}
+    </div>`).join('') +
+    (isAdmin()?`<div class="crit-manage"><input id="newCrit" placeholder="Novo critério..."><button class="del" style="background:#e6f7ee;color:var(--ader)" onclick="addCrit()">+</button></div>`:'') +
+    `<div class="hint">O score de execução de cada check-in é a % de critérios atendidos.</div>`);
+}
+async function editCrit(i,v){ state.criterios[i]=v.trim()||state.criterios[i]; await salvarConfig(); }
+async function delCrit(i){ state.criterios.splice(i,1); if(await salvarConfig()) renderCritSheet(); }
+async function addCrit(){ const v=$('newCrit').value.trim(); if(!v) return;
+  state.criterios.push(v); if(await salvarConfig()) renderCritSheet(); }
+
+/* ============ EXPORTAÇÃO ============ */
+$('btnExport').onclick=()=>{
+  if(!state.pdvs.length && !state.avaliacoes.length){ toast('Nada para exportar ainda'); return; }
+  const crit=state.criterios;
+  const aval=state.avaliacoes
+    .sort((a,b)=>(b.ts||'').localeCompare(a.ts||''))
+    .map(a=>{
+      const p=state.pdvs.find(x=>x.id===a.pdvId)||{};
+      const o={ Codigo_PDV:a.pdvCodigo||p.codigo||'', PDV:a.pdvNome||p.nome||'',
+        Categoria:catLabel(p.cat), Segmento:a.pdvSegmento||p.segmento||'', Responsavel:a.userNome||'',
+        Data_Hora:a.ts?new Date(a.ts).toLocaleString('pt-BR'):'',
+        Dentro_do_Raio:a.dentro?'Sim':'Não', Distancia_m:a.dist,
+        Minha_Lat:a.uLat, Minha_Lng:a.uLng,
+        Score_Execucao:a.score+'%', Nota_Geral:a.nota, Observacoes:a.obs };
+      crit.forEach(c=>o[c]=(a.criterios||[]).includes(c)?'Sim':'Não');
+      return o;
+    });
+  const pdvs=state.pdvs.map(p=>({ Codigo_PDV:p.codigo||'', PDV:p.nome, Categoria:catLabel(p.cat),
+    Segmento:p.segmento||'', Tipo_Original:p.tipoRaw, Latitude:p.lat, Longitude:p.lng, Origem:p.origem,
+    Cadastrado_Por:p.criadoPorNome||'', ...p.extra }));
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(pdvs), 'PDVs');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(aval.length?aval:[{Info:'Sem check-ins'}]), 'Check-ins');
+  XLSX.writeFile(wb, `indicador-pdv_${new Date().toISOString().slice(0,10)}.xlsx`);
+  toast('📤 Excel gerado');
+};
+
+/* ============ MODELO ============ */
+$('btnModelo').onclick=()=>{
+  const linhas=[
+    {Nome:'Bar do Zé',Latitude:-25.0945,Longitude:-50.1633,Tipo:'Concorrência (Heineken)',Segmento:'Bar',Codigo_PDV:'PDV-0001',Endereco:'Rua Sete de Setembro, 120',Cidade:'Ponta Grossa',Preco_Negociado:'',Observacao:'Gôndola do concorrente em destaque'},
+    {Nome:'Mercado Central',Latitude:-25.0981,Longitude:-50.1592,Tipo:'Aderido (preço negociado)',Segmento:'Mercado',Codigo_PDV:'PDV-0002',Endereco:'Av. Vicente Machado, 850',Cidade:'Ponta Grossa',Preco_Negociado:4.99,Observacao:'Preço negociado desde 03/2026'},
+    {Nome:'Mercearia do Bairro',Latitude:-25.0876,Longitude:-50.1344,Tipo:'Prospecção',Segmento:'Mercearia',Codigo_PDV:'',Endereco:'Rua Balduíno Taques, 45',Cidade:'Ponta Grossa',Preco_Negociado:'',Observacao:'Sem código ainda — PDV novo'},
+    {Nome:'Conveniência Norte',Latitude:-25.0799,Longitude:-50.1721,Tipo:'Aderido (preço negociado)',Segmento:'Conveniência',Codigo_PDV:'PDV-0004',Endereco:'Rua Júlio de Castilhos, 300',Cidade:'Ponta Grossa',Preco_Negociado:5.49,Observacao:''}
+  ];
+  const instr=[
+    {Campo:'COMO PREENCHER',Orientacao:'Cole seus dados na aba Base_PDVs a partir da linha 2. Apague as 4 linhas de exemplo antes de importar.'},
+    {Campo:'Nome (obrigatório)',Orientacao:'Nome do PDV como aparecerá no mapa e na lista.'},
+    {Campo:'Latitude (obrigatório)',Orientacao:'Decimal negativo no Paraná. Ex.: -25.094500. Ponto ou vírgula, tanto faz.'},
+    {Campo:'Longitude (obrigatório)',Orientacao:'Decimal negativo no Paraná. Ex.: -50.163300'},
+    {Campo:'Tipo (obrigatório)',Orientacao:'STATUS COMERCIAL do PDV: Concorrência, Aderido, Prospecção. É o que define a COR no mapa.'},
+    {Campo:'Segmento (opcional)',Orientacao:'CANAL do PDV: Bar, Mercado, Mercearia, Padaria, Conveniência, Restaurante, Distribuidora. Vira filtro na lista e no mapa.'},
+    {Campo:'Tipo x Segmento',Orientacao:'São coisas diferentes. Um mesmo Bar pode ser Concorrência hoje e Aderido depois — o Segmento não muda, o Tipo sim.'},
+    {Campo:'Codigo_PDV (opcional)',Orientacao:'Pode ficar em branco. Quando preenchido, permite cruzar os check-ins com a base do BI.'},
+    {Campo:'Zeros à esquerda',Orientacao:'Formate a coluna do código como TEXTO (ex.: 0004521), senão o Excel corta os zeros.'},
+    {Campo:'Padronize o segmento',Orientacao:'Escreva sempre igual. "Mercado" e "mercados" viram dois filtros diferentes na ferramenta.'},
+    {Campo:'Demais colunas',Orientacao:'Opcionais e livres. São importadas junto e voltam na exportação.'},
+    {Campo:'Onde achar lat/long',Orientacao:'Google Maps: botão direito no ponto. O primeiro número é a Latitude, o segundo a Longitude.'},
+    {Campo:'Erro comum',Orientacao:'Trocar latitude com longitude. No Paraná: Latitude entre -22 e -26, Longitude entre -48 e -54.'}
+  ];
+  const wb=XLSX.utils.book_new();
+  const ws=XLSX.utils.json_to_sheet(linhas);
+  ws['!cols']=[{wch:30},{wch:14},{wch:14},{wch:28},{wch:18},{wch:14},{wch:32},{wch:16},{wch:16},{wch:38}];
+  XLSX.utils.book_append_sheet(wb,ws,'Base_PDVs');
+  const wi=XLSX.utils.json_to_sheet(instr); wi['!cols']=[{wch:26},{wch:95}];
+  XLSX.utils.book_append_sheet(wb,wi,'Instruções');
+  XLSX.writeFile(wb,'Modelo_Importacao_PDV.xlsx');
+  toast('📄 Modelo baixado');
+};
+
+/* ============ RAIO ============ */
+const raioEl=$('raio');
+raioEl.oninput=()=>{ state.raio=+raioEl.value; state._raioLocal=true;
+  $('raioVal').textContent=state.raio+' m'; if(meCircle) meCircle.setRadius(state.raio); };
+raioEl.onchange=()=>{ drawPdvs(); if($('view-lista').classList.contains('active')) renderList(); };
+$('btnCenter').onclick=()=>{ if(me&&map) map.setView([me.lat,me.lng],16); else toast('Sem posição definida'); };
+$('btnManual').onclick=()=>toggleManual();
+
+/* ============ EXPOR PARA O HTML ============ */
+Object.assign(window,{ openCheckin, openPdv, toggleCrit, setNota, delAval, setFiltro,
+  setCatColor, setCatLabel, editCrit, delCrit, addCrit, closeSheet });
+
+/* ============ INIT ============ */
+initMap();
+updateSync();
+</script>
+</body>
+</html>
